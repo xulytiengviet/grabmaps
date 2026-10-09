@@ -7,7 +7,7 @@ const map=window.trafficMap,holder=document.getElementById('pmtiles-panel');
 if(!map||!holder||!window.L)return;
 holder.innerHTML='<h2>Kho dữ liệu PMTiles · Cloudflare R2</h2><div id="pm-status" class="hint" aria-live="polite">Đang kiểm tra cấu hình…</div><div class="buttons"><button id="pm-reload">Tải PMTiles</button><button class="secondary" id="pm-hide">Ẩn lớp PMTiles</button></div><p class="hint">Nguồn mặc định: Cloudflare R2 · hcm-traffic.pmtiles. Có thể đổi nguồn trong Settings. Nền Vietflex được giữ nguyên.</p>';
 const $=id=>document.getElementById(id),show=t=>$('pm-status').textContent=t;
-let tileLayer=null,archive=null,configUrl=null;
+let tileLayer=null,archive=null,configUrl=null,tileErrors=0,painted=0;
 const inferredDefault='https://pub-2aa79804a6c64275af743f277eeca6f2.r2.dev/hcm-traffic.pmtiles';
 function configuredUrl(){
 try{const saved=JSON.parse(localStorage.getItem('hcm-traffic-public-service-config-v1')||'{}');const x=saved.pmtiles||inferredDefault,u=new URL(x,location.href);if(u.protocol!=='https:'||u.username||u.password)return null;return u.href}catch(_){return inferredDefault}}
@@ -27,20 +27,23 @@ ctx.beginPath();for(const ring of shape){let first=true;for(const p of ring){if(
 if(type===3){ctx.fillStyle='rgba(14,165,233,.10)';ctx.fill('evenodd')}else{ctx.stroke();}}
 function paint(tileBytes,canvas,deps){
 const ctx=canvas.getContext('2d'),size=256,vt=new deps.VectorTile(new deps.Pbf(tileBytes));
+let drawn=0;
 ctx.clearRect(0,0,size,size);
 for(const [layerName,layer] of Object.entries(vt.layers)){
 const lname=layerName.toLowerCase();
 const isRoad=/road|transport|highway|street/.test(lname),isWater=/water|river|canal/.test(lname),isBridge=/bridge|tunnel/.test(lname),isPoi=/point|poi|sign|stop|junction|node/.test(lname),isZone=/service_zones|coverage_zone|traffic_zone/.test(lname);
 if(!isRoad&&!isWater&&!isBridge&&!isPoi&&!isZone)continue;
 for(let i=0;i<layer.length;i++){
-const f=layer.feature(i),p=f.properties||{},type=f.type;
+const f=layer.feature(i),p=f.properties||{},type=f.type;drawn++;
 if(type===2){ctx.strokeStyle=isWater?'#0284c7':isBridge?'#0f766e':'#2563eb';ctx.lineWidth=isRoad&&/motorway|trunk|primary/.test(p.highway||'')?2.8:1.4;ctx.globalAlpha=.82}
 const scale=size/(f.extent||4096),geom=f.loadGeometry();
-if(type===1){ctx.fillStyle=isWater?'#0284c7':lname==='bus_stops'?'#f97316':'#9333ea';for(const ring of geom)for(const pt of ring){ctx.beginPath();ctx.arc(pt.x*scale,pt.y*scale,2.6,0,Math.PI*2);ctx.fill()}}
-else{ctx.beginPath();for(const ring of geom){ring.forEach((pt,j)=>{if(!j)ctx.moveTo(pt.x*scale,pt.y*scale);else ctx.lineTo(pt.x*scale,pt.y*scale)});if(type===3)ctx.closePath()}if(type===3){ctx.fillStyle=isZone?'rgba(34,197,94,.12)':'rgba(2,132,199,.09)';ctx.fill('evenodd')}else ctx.stroke();}
+if(type===1){ctx.fillStyle=isWater?'#0284c7':lname==='bus_stops'?'#f97316':'#9333ea';for(const ring of geom)for(const pt of ring){ctx.beginPath();ctx.arc(pt.x*scale,pt.y*scale,lname==='bus_stops'?5:3,0,Math.PI*2);ctx.fill()}}
+else{ctx.beginPath();for(const ring of geom){ring.forEach((pt,j)=>{if(!j)ctx.moveTo(pt.x*scale,pt.y*scale);else ctx.lineTo(pt.x*scale,pt.y*scale)});if(type===3)ctx.closePath()}if(type===3){ctx.fillStyle=isZone?'rgba(34,197,94,.16)':'rgba(2,132,199,.09)';ctx.fill('evenodd')}else ctx.stroke();}
 }
 ctx.globalAlpha=1;
 }
+painted+=drawn;
+if(drawn>0 && painted===drawn)show('PMTiles đang hiển thị '+drawn+' đối tượng ở ô đầu tiên; các ô khác tiếp tục tải.');
 }
 function newLayer(deps){
 return L.GridLayer.extend({createTile(coords,done){
@@ -56,7 +59,7 @@ raw=new Uint8Array(await new Response(stream).arrayBuffer());
 paint(raw,canvas,deps);
 }
 done(null,canvas);
-}).catch(e=>{console.warn('PMTiles tile decode:',e);done(e,canvas)});
+}).catch(e=>{console.warn('PMTiles tile decode:',e);tileErrors++;if(tileErrors<=3)show('Lỗi đọc tile PMTiles: '+e.message+' (kiểm tra Console).');done(e,canvas)});
 return canvas}})}
 async function load(){
 $('pm-reload').disabled=true;show('Đang kiểm tra PMTiles và hỗ trợ HTTP Range…');
@@ -64,10 +67,14 @@ try{
 const url=configuredUrl();if(!url)throw Error('URL cấu hình không hợp lệ');
 const deps=await dependencies();archive=new deps.PMTiles(url);
 const h=await archive.getHeader();
+let metadata={};try{metadata=await archive.getMetadata()||{}}catch(e){console.warn('PMTiles metadata:',e)}
+console.info('Traffic PMTiles header, metadata',h,metadata);
 if(h.tileType!==1)throw Error('Tệp không phải MVT/PBF (tileType='+h.tileType+')');
-if(tileLayer)map.removeLayer(tileLayer);
+if(tileLayer)map.removeLayer(tileLayer);tileErrors=0;painted=0;
 const Layer=newLayer(deps);tileLayer=new Layer({tileSize:256,opacity:1,maxNativeZoom:h.maxZoom,maxZoom:21,minZoom:h.minZoom}).addTo(map);configUrl=url;
-show('Đã kết nối PMTiles · zoom '+h.minZoom+'–'+h.maxZoom+'. Hiển thị bus_stops / service_zones hoặc các lớp giao thông tương thích.');
+const names=(metadata.vector_layers||[]).map(x=>x.id).join(', ');
+show('Đã mở PMTiles · zoom '+h.minZoom+'–'+h.maxZoom+' · lớp: '+(names||'chưa có metadata')+'. Đang đọc các ô vector…');
+setTimeout(()=>{if(!painted&&!tileErrors)show('Đã mở PMTiles nhưng chưa vẽ được đối tượng trong khu vực đang xem. Kiểm tra phạm vi dữ liệu, tên lớp MVT và zoom.');},6500);
 document.getElementById('dataInfo').textContent='PMTiles đã kết nối: '+url;
 document.getElementById('autoLoad').checked=false;
 }catch(e){
