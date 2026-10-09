@@ -1,7 +1,9 @@
 <!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TP.HCM Traffic GIS | GrabMaps</title>
+<title>Vietflex Map · Traffic GIS TP.HCM | Long Ngo</title>
+<meta name="description" content="WebGIS giao thông TP.HCM · Long Ngo thiết kế · MIT 2026">
 <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Vietflexmap/VN@6144d565fcf236727577ab3c4471bbe49f86892f/dist/vietflex.css">
 <style>
 :root{font-family:Inter,system-ui,Arial,sans-serif;color:#12253a}*{box-sizing:border-box}body{margin:0;background:#f7fafc}
 header{height:62px;background:white;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #dae3ed}
@@ -30,7 +32,7 @@ button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
 .settingItem small{display:block;font-size:11px;color:#687c90;margin:4px 0 8px}
 .settingState{font-weight:600;font-size:11px;padding:3px 8px;background:#f1f5f9;border-radius:12px;color:#64748b}
 .settingsActions{display:flex;gap:9px;justify-content:flex-end;margin-top:16px}
-</style></head><body><header><div><b>TP.HCM · Traffic GIS</b> <span class="tag">GrabMaps Lab</span></div><small>OSM · GeoJSON · Routing</small></header>
+</style></head><body><header><div><b>TP.HCM · Traffic GIS</b> <span class="tag">Vietflex Map</span></div><small>Long Ngo thiết kế · MIT 2026</small></header>
 <main><aside>
 <div class="stat"><div><b id="countRoad">0</b>Đường</div><div><b id="countPoi">0</b>Đối tượng</div><div><b id="countNode">0</b>Nút giao*</div></div>
 <p class="hint">*Nút giao được ước lượng từ các nút đường OSM dùng chung, không phải đồ thị điều hướng đã chuẩn hóa.</p>
@@ -42,8 +44,8 @@ button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
 <p>Nhấn “Chọn điểm đầu”, nhấp bản đồ; tiếp tục chọn điểm cuối. Tuyến xe ô tô tham khảo từ OSRM, không thay thế hướng dẫn giao thông thực tế.</p>
 <div class="buttons"><button id="start">Chọn điểm đầu</button><button id="end">Chọn điểm cuối</button><button class="secondary" id="route">Tính tuyến</button><button class="secondary" id="clear">Xóa tuyến</button></div>
 <h2>Thông tin và kiểm chứng</h2>
-<div id="status">Sẵn sàng. Chọn một lớp và tải dữ liệu OSM theo khung nhìn.</div>
-<p><b>Nguồn:</b> © OpenStreetMap contributors (ODbL). Tuyến OSRM demo công cộng có thể bị giới hạn. Không có dữ liệu ùn tắc trực tiếp hoặc camera phạt nguội thời gian thực.</p>
+<div id="status">Sẵn sàng. Nền bản đồ Vietflex Map; chọn một lớp và tải dữ liệu OSM theo khung nhìn.</div>
+<p><b>Long Ngo thiết kế · MIT 2026.</b></p><p><b>Nguồn:</b> © OpenStreetMap contributors (ODbL). Tuyến OSRM demo công cộng có thể bị giới hạn. Không có dữ liệu ùn tắc trực tiếp hoặc camera phạt nguội thời gian thực.</p>
 <p><b>Lưu ý:</b> Tải trọng, chiều cao tĩnh không, tốc độ và làn xe chỉ hiển thị khi OSM có thuộc tính tương ứng; không suy đoán các giá trị thiếu. GrabMaps/AWS chưa được kết nối.</p>
 </aside><div id="map"></div></main>
 <div id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -52,6 +54,7 @@ button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
 <div id="settingsFields"></div>
 <div class="settingsActions"><button class="secondary" id="resetSettings">Khôi phục mặc định</button><button id="saveSettings">Lưu cấu hình</button></div>
 <p id="settingsNote" aria-live="polite"></p></div></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Vietflexmap/VN@6144d565fcf236727577ab3c4471bbe49f86892f/dist/vietflex.js"></script>
 <script>
 
 const serviceDefs=[
@@ -92,8 +95,34 @@ catch(_){document.getElementById('settingsNote').textContent='Không lưu đư�
 };
 document.getElementById('resetSettings').onclick=()=>{serviceSettings={};try{localStorage.removeItem(settingsStorageKey)}catch(_){}displaySettings();document.getElementById('settingsNote').textContent='Đã khôi phục về Chưa kết nối.'};
 
-const map=L.map('map',{preferCanvas:true}).setView([10.7769,106.7009],12);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+// Vietflex Map is the preferred renderer; Leaflet remains available for GIS overlay layers.
+let map;
+let mapProvider='Vietflex Map';
+try {
+  if (!window.Vietflex || typeof Vietflex.vietflexMap !== 'function') {
+    throw new Error('Vietflex SDK unavailable');
+  }
+  map=Vietflex.vietflexMap('map',{
+    useLegacyGoogleTiles:true,
+    googleMapType:'roadmap',
+    zoomControl:false,
+    attributionControl:false
+  });
+  map.setView([10.7769,106.7009],12);
+  new Vietflex.ZoomControl({position:'topleft'}).addTo(map);
+  new Vietflex.AttributionControl({position:'bottomright'}).addTo(map);
+} catch(error) {
+  console.warn('Vietflex Map unavailable; loading OSM fallback:',error);
+  mapProvider='Leaflet · OSM fallback';
+  // Clear partially mounted map before initializing fallback.
+  try { if(map && typeof map.remove==='function')map.remove(); } catch(_){}
+  document.getElementById('map').innerHTML='';
+  map=L.map('map',{preferCanvas:true,zoomControl:true}).setView([10.7769,106.7009],12);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19,attribution:'© OpenStreetMap contributors'
+  }).addTo(map);
+}
+
 const groups={},records=[], roadIds=new Set(),nodeRefs=new Map();let start=null,end=null,mode=null,routeLine=null,markers=[];
 const defs=[
 ['roads','Đường và đường hẻm','#2563eb'],['intersections','Nút giao thông','#7c3aed'],
