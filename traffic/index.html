@@ -19,11 +19,22 @@ button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
 .stat b{display:block;font-size:18px;margin-bottom:3px}.hint{font-size:11px;color:#69788b}
 .legend{background:#fff;padding:8px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 9px #0002}
 @media(max-width:700px){header{height:55px;padding:0 12px}header b{font-size:16px}main{flex-direction:column-reverse;height:calc(100dvh - 55px)}aside{width:100%;height:42%;border-right:0;border-top:1px solid #ddd;padding:12px}#map{height:58%}}
+
+#settingsBtn{background:#eef5ff;color:#145ba6}
+#settingsModal{position:fixed;inset:0;background:#0b1e348c;z-index:2000;display:none;align-items:center;justify-content:center;padding:16px}
+#settingsModal.open{display:flex}
+.settingsPanel{background:white;border-radius:16px;width:min(580px,100%);max-height:88dvh;overflow:auto;box-shadow:0 15px 45px #0003;padding:22px}
+.settingsPanel h2{font-size:20px;margin:0}.settingsHead{display:flex;align-items:center;justify-content:space-between}
+.settingItem{padding:13px 0;border-bottom:1px solid #e6edf4}.settingItem label{display:block;font-weight:600;font-size:13px;margin-bottom:5px}
+.settingItem input{width:100%;border:1px solid #cbd7e4;border-radius:8px;padding:9px;background:#fff;color:#12253a}
+.settingItem small{display:block;font-size:11px;color:#687c90;margin:4px 0 8px}
+.settingState{font-weight:600;font-size:11px;padding:3px 8px;background:#f1f5f9;border-radius:12px;color:#64748b}
+.settingsActions{display:flex;gap:9px;justify-content:flex-end;margin-top:16px}
 </style></head><body><header><div><b>TP.HCM · Traffic GIS</b> <span class="tag">GrabMaps Lab</span></div><small>OSM · GeoJSON · Routing</small></header>
 <main><aside>
 <div class="stat"><div><b id="countRoad">0</b>Đường</div><div><b id="countPoi">0</b>Đối tượng</div><div><b id="countNode">0</b>Nút giao*</div></div>
 <p class="hint">*Nút giao được ước lượng từ các nút đường OSM dùng chung, không phải đồ thị điều hướng đã chuẩn hóa.</p>
-<h2>Lớp dữ liệu giao thông</h2><div id="toggles"></div>
+<button id="settingsBtn" class="secondary" style="width:100%">⚙ Cài đặt kết nối dịch vụ</button><h2>Lớp dữ liệu giao thông</h2><div id="toggles"></div>
 <h2>Thu thập dữ liệu trong khung nhìn</h2>
 <div class="buttons"><button id="load">Tải dữ liệu OSM</button><button class="secondary" id="export">Xuất GeoJSON</button></div>
 <p>Phóng to tới quận/khu vực cần xem rồi nhấn tải. Giới hạn diện tích để bảo vệ dịch vụ Overpass cộng đồng.</p>
@@ -35,8 +46,52 @@ button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
 <p><b>Nguồn:</b> © OpenStreetMap contributors (ODbL). Tuyến OSRM demo công cộng có thể bị giới hạn. Không có dữ liệu ùn tắc trực tiếp hoặc camera phạt nguội thời gian thực.</p>
 <p><b>Lưu ý:</b> Tải trọng, chiều cao tĩnh không, tốc độ và làn xe chỉ hiển thị khi OSM có thuộc tính tương ứng; không suy đoán các giá trị thiếu. GrabMaps/AWS chưa được kết nối.</p>
 </aside><div id="map"></div></main>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+<div class="settingsPanel"><div class="settingsHead"><h2 id="settingsTitle">⚙ Cài đặt kết nối</h2><button class="secondary" id="closeSettings" aria-label="Đóng">✕</button></div>
+<p>Cấu hình các nguồn dữ liệu tùy chọn. Trạng thái mặc định là <b>Chưa kết nối</b>. Chỉ nhập URL công khai, không nhập API secret hoặc token quản trị. Các URL được lưu cục bộ trong trình duyệt hiện tại.</p>
+<div id="settingsFields"></div>
+<div class="settingsActions"><button class="secondary" id="resetSettings">Khôi phục mặc định</button><button id="saveSettings">Lưu cấu hình</button></div>
+<p id="settingsNote" aria-live="polite"></p></div></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+
+const serviceDefs=[
+{id:'grabmaps',name:'GrabMaps / AWS Location',hint:'URL Worker proxy để kết nối GrabMaps sau này; không nhập AWS secret vào trang công khai.'},
+{id:'cloudflare',name:'Cloudflare Workers API',hint:'URL HTTPS của backend công khai, có xác thực server-side khi cần.'},
+{id:'pmtiles',name:'PMTiles / Cloudflare R2',hint:'Địa chỉ HTTPS tệp PMTiles hoặc TileJSON; hiện chưa dùng để nạp bản đồ.'},
+{id:'traffic',name:'Giao thông trực tiếp',hint:'Endpoint API về ùn tắc, lưu lượng, vận tốc; chỉ hỗ trợ cấu hình, chưa có bộ đọc dữ liệu.'},
+{id:'camera',name:'Camera và phạt nguội',hint:'Endpoint dữ liệu được cấp phép; chưa triển khai hiển thị camera.'},
+{id:'flood',name:'Ngập đường và thi công',hint:'Endpoint cảnh báo được xác minh; chưa triển khai đồng bộ tự động.'},
+{id:'graph',name:'Dijkstra / A* Graph API',hint:'Endpoint dịch vụ tính đường riêng; hiện chỉ sử dụng OSRM demo.'}
+];
+const settingsStorageKey='hcm-traffic-public-service-config-v1';
+let serviceSettings={};
+try{const parsed=JSON.parse(localStorage.getItem(settingsStorageKey)||'{}');if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))serviceSettings=parsed}catch(_){}
+function displaySettings(){
+document.getElementById('settingsFields').innerHTML='';
+for(const s of serviceDefs){
+const section=document.createElement('div');section.className='settingItem';
+const label=document.createElement('label');label.textContent=s.name;label.htmlFor='svc-'+s.id;
+const state=document.createElement('span');state.className='settingState';
+state.textContent=serviceSettings[s.id]?'Đã lưu cấu hình · Chưa kiểm tra':'Chưa kết nối';
+const hint=document.createElement('small');hint.textContent=s.hint;
+const input=document.createElement('input');input.type='url';input.id='svc-'+s.id;
+input.placeholder='https://... (để trống nếu chưa kết nối)';input.value=serviceSettings[s.id]||'';
+section.append(label,state,hint,input);document.getElementById('settingsFields').append(section)
+}}
+document.getElementById('settingsBtn').onclick=()=>{displaySettings();document.getElementById('settingsNote').textContent='';document.getElementById('settingsModal').classList.add('open')};
+document.getElementById('closeSettings').onclick=()=>document.getElementById('settingsModal').classList.remove('open');
+document.getElementById('settingsModal').onclick=e=>{if(e.target.id==='settingsModal')e.currentTarget.classList.remove('open')};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('settingsModal').classList.remove('open')});
+document.getElementById('saveSettings').onclick=()=>{
+const next={};
+for(const s of serviceDefs){const val=document.getElementById('svc-'+s.id).value.trim();
+if(!val)continue;
+try{const u=new URL(val);if(u.protocol!=='https:'||u.username||u.password||u.hash||u.search)throw Error('invalid');next[s.id]=u.href}catch(_){document.getElementById('settingsNote').textContent='URL không hợp lệ tại '+s.name+'. Chỉ cho phép HTTPS, không chứa user, password, query hay fragment.';return}}
+try{localStorage.setItem(settingsStorageKey,JSON.stringify(next));serviceSettings=next;displaySettings();document.getElementById('settingsNote').textContent='Đã lưu trên trình duyệt. Dịch vụ chưa được kiểm tra hoặc kết nối vào WebGIS.'}
+catch(_){document.getElementById('settingsNote').textContent='Không lưu được cấu hình trên trình duyệt này.'}
+};
+document.getElementById('resetSettings').onclick=()=>{serviceSettings={};try{localStorage.removeItem(settingsStorageKey)}catch(_){}displaySettings();document.getElementById('settingsNote').textContent='Đã khôi phục về Chưa kết nối.'};
+
 const map=L.map('map',{preferCanvas:true}).setView([10.7769,106.7009],12);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
 const groups={},records=[], roadIds=new Set(),nodeRefs=new Map();let start=null,end=null,mode=null,routeLine=null,markers=[];
