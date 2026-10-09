@@ -18,6 +18,7 @@ function db(){return new Promise((resolve,reject)=>{const request=indexedDB.open
 async function stored(mode,value){const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction('data',mode==='get'?'readonly':'readwrite'),os=tx.objectStore('data');const r=mode==='get'?os.get('bus500'):mode==='set'?os.put(value,'bus500'):os.delete('bus500');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);tx.oncomplete=()=>d.close()})}
 function esc(t){return String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]))}
 function render(){
+window.dispatchEvent(new CustomEvent('traffic:bus500-data',{detail:{stops,zoneData}}));
 pts.clearLayers();buffers.clearLayers();zones.clearLayers();markers=[];
 const bounds=[];
 stops.forEach((s,i)=>{if(!Array.isArray(s)||!Number.isFinite(s[0])||!Number.isFinite(s[1]))return;
