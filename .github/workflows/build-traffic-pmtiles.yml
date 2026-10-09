@@ -1,0 +1,38 @@
+name: Build HCMC Traffic PMTiles
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tile tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool libsqlite3-dev zlib1g-dev git build-essential
+          git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          make -C /tmp/tippecanoe -j2
+          sudo make -C /tmp/tippecanoe install
+          curl -fLsS https://github.com/protomaps/go-pmtiles/releases/latest/download/pmtiles_linux_amd64 -o /tmp/pmtiles
+          chmod +x /tmp/pmtiles
+      - name: Download Vietnam OSM snapshot and clip historic HCMC
+        run: |
+          mkdir -p traffic/data
+          curl --fail --location --retry 3 https://download.geofabrik.de/asia/vietnam-latest.osm.pbf -o /tmp/vietnam.osm.pbf
+          # Illustrative operational bbox - not administrative 2025 boundary.
+          osmium extract -b 106.35,10.35,107.15,11.25 /tmp/vietnam.osm.pbf -o /tmp/hcm.osm.pbf --overwrite
+          osmium tags-filter /tmp/hcm.osm.pbf w/highway w/waterway n/highway=traffic_signals,stop,give_way,bus_stop n/amenity=parking,fuel,charging_station,bus_station --overwrite -o /tmp/hcm-filtered.osm.pbf
+          osmium export /tmp/hcm-filtered.osm.pbf -o /tmp/hcm-features.geojson --overwrite
+      - name: Build vector MBTiles and convert to PMTiles
+        run: |
+          tippecanoe -o /tmp/hcm-traffic.mbtiles -l transport -zg --drop-densest-as-needed --force /tmp/hcm-features.geojson
+          /tmp/pmtiles convert /tmp/hcm-traffic.mbtiles traffic/data/hcm-traffic.pmtiles
+          ls -lh traffic/data/hcm-traffic.pmtiles
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hcm-traffic-pmtiles
+          path: traffic/data/hcm-traffic.pmtiles
+          retention-days: 7
