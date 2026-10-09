@@ -27,3 +27,32 @@ The generated transport layer is named `transport`, with individual roads/points
 
 ## Deployment
 The Pages workflow serves files from `traffic/` only. With an external R2 URL, publishing the PMTiles file to Pages is not needed. Verify HTTP 206 Partial Content for Range requests before using production.
+
+
+## Manual R2 upload — packaged data from the 500 m bus-stop HTML
+
+The user-supplied `hcm-traffic.pmtiles` artifact produced on 2026-10-09 contains:
+- `bus_stops`: 5,875 bus stops, vector point tiles
+- `service_zones`: 1,543 source coverage zones, vector polygon tiles
+- Zoom levels: 8–14
+- PMTiles v3, gzip-compressed MVT, approximately 2.73 MiB
+
+**Scope:** Despite the generic filename, this file contains only the source bus stop and 500 m coverage layers; it does **not** include the complete roads, bridges, signs, real-time traffic, or official data APIs. Missing source data cannot be inferred.
+
+Cloudflare R2: upload the file with object key `hcm-traffic.pmtiles`, enable public HTTPS access and Range/CORS, then set the exact public URL in **Settings → PMTiles / Cloudflare R2** and save. The file is not committed to the repository by this integration.
+
+Sample CORS:
+```json
+[
+  {
+    "AllowedOrigins": ["https://xulytiengviet.github.io"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range", "If-Range", "If-None-Match"],
+    "ExposeHeaders": ["Accept-Ranges", "Content-Range", "Content-Length", "ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Do not run the independent *Build HCMC Traffic PMTiles* workflow and assume it produces the same data: that workflow builds a different OSM transport dataset and currently uses a different classification schema.
+
