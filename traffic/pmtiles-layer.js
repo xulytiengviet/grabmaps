@@ -5,10 +5,10 @@
 (async()=>{'use strict';
 const map=window.trafficMap,holder=document.getElementById('pmtiles-panel');
 if(!map||!holder||!window.L)return;
-holder.innerHTML='<h2>Kho dữ liệu PMTiles</h2><div id="pm-status" class="hint" aria-live="polite">Đang kiểm tra cấu hình…</div><div class="buttons"><button id="pm-reload">Tải PMTiles</button><button class="secondary" id="pm-hide">Ẩn lớp PMTiles</button></div><p class="hint">PMTiles cần tệp MVT thực tế trên GitHub Pages/R2 với HTTP Range và CORS. Bản đồ nền Vietflex được giữ nguyên.</p>';
+holder.innerHTML='<h2>Kho dữ liệu PMTiles · Cloudflare R2</h2><div id="pm-status" class="hint" aria-live="polite">Đang kiểm tra cấu hình…</div><div class="buttons"><button id="pm-reload">Tải PMTiles</button><button class="secondary" id="pm-hide">Ẩn lớp PMTiles</button></div><p class="hint">Nguồn mặc định: Cloudflare R2 · hcm-traffic.pmtiles. Có thể đổi nguồn trong Settings. Nền Vietflex được giữ nguyên.</p>';
 const $=id=>document.getElementById(id),show=t=>$('pm-status').textContent=t;
 let tileLayer=null,archive=null,configUrl=null;
-const inferredDefault=new URL('./data/hcm-traffic.pmtiles',location.href).href;
+const inferredDefault='https://pub-2aa79804a6c64275af743f277eeca6f2.r2.dev/hcm-traffic.pmtiles';
 function configuredUrl(){
 try{const saved=JSON.parse(localStorage.getItem('hcm-traffic-public-service-config-v1')||'{}');const x=saved.pmtiles||inferredDefault,u=new URL(x,location.href);if(u.protocol!=='https:'||u.username||u.password)return null;return u.href}catch(_){return inferredDefault}}
 async function dependencies(){
