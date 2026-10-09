@@ -37,7 +37,7 @@ button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
 <div class="stat"><div><b id="countRoad">0</b>Đường</div><div><b id="countPoi">0</b>Đối tượng</div><div><b id="countNode">0</b>Nút giao*</div></div>
 <p class="hint">*Nút giao được ước lượng từ các nút đường OSM dùng chung, không phải đồ thị điều hướng đã chuẩn hóa.</p>
 <button id="settingsBtn" class="secondary" style="width:100%">⚙ Cài đặt kết nối dịch vụ</button><h2>Lớp dữ liệu giao thông</h2><div id="toggles"></div>
-<section id="waterway-panel"></section><details class="thematic-panel" open><summary>Chuyên đề xe buýt · phân tích vùng phục vụ</summary><section id="bus500-panel"></section><section id="bus-lab"></section></details><h2>Dữ liệu giao thông thực tế</h2><label class="option"><span>Tự tải khi di chuyển bản đồ</span><input type="checkbox" id="autoLoad" checked></label><p class="hint" id="dataInfo">Chưa tải lớp dữ liệu. Nền Vietflex là ảnh bản đồ, không tự cung cấp GeoJSON giao thông.</p><h2>Thu thập dữ liệu trong khung nhìn</h2>
+<section id="waterway-panel"></section><details class="thematic-panel" open><summary>Chuyên đề xe buýt · phân tích vùng phục vụ</summary><section id="bus500-panel"></section><section id="bus-lab"></section></details><section id="pmtiles-panel"></section><h2>Dữ liệu giao thông thực tế</h2><label class="option"><span>Tự tải khi di chuyển bản đồ</span><input type="checkbox" id="autoLoad" checked></label><p class="hint" id="dataInfo">Đang kiểm tra dữ liệu PMTiles. Nếu chưa có tệp, bạn vẫn có thể tải OSM theo khu vực.</p><h2>Thu thập dữ liệu trong khung nhìn</h2>
 <div class="buttons"><button id="load">Tải dữ liệu OSM</button><button class="secondary" id="export">Xuất GeoJSON</button></div>
 <p>Tự tải một vùng quanh trung tâm khi mở hoặc di chuyển bản đồ. Nhấn Tải dữ liệu OSM để thử lại. Các lớp chỉ hiển thị nơi OpenStreetMap đã có dữ liệu.</p>
 <h2>Tìm đường (tham khảo)</h2>
@@ -90,7 +90,7 @@ const next={};
 for(const s of serviceDefs){const val=document.getElementById('svc-'+s.id).value.trim();
 if(!val)continue;
 try{const u=new URL(val);if(u.protocol!=='https:'||u.username||u.password||u.hash||u.search)throw Error('invalid');next[s.id]=u.href}catch(_){document.getElementById('settingsNote').textContent='URL không hợp lệ tại '+s.name+'. Chỉ cho phép HTTPS, không chứa user, password, query hay fragment.';return}}
-try{localStorage.setItem(settingsStorageKey,JSON.stringify(next));serviceSettings=next;displaySettings();document.getElementById('settingsNote').textContent='Đã lưu trên trình duyệt. Dịch vụ chưa được kiểm tra hoặc kết nối vào WebGIS.'}
+try{localStorage.setItem(settingsStorageKey,JSON.stringify(next));serviceSettings=next;displaySettings();window.dispatchEvent(new Event('traffic:settings-saved'));document.getElementById('settingsNote').textContent='Đã lưu trên trình duyệt. Dịch vụ chưa được kiểm tra hoặc kết nối vào WebGIS.'}
 catch(_){document.getElementById('settingsNote').textContent='Không lưu được cấu hình trên trình duyệt này.'}
 };
 document.getElementById('resetSettings').onclick=()=>{serviceSettings={};try{localStorage.removeItem(settingsStorageKey)}catch(_){}displaySettings();document.getElementById('settingsNote').textContent='Đã khôi phục về Chưa kết nối.'};
@@ -201,4 +201,5 @@ status('Tuyến tham khảo: '+(rr.distance/1000).toFixed(2)+' km · '+Math.roun
 <script src="./bus500.js" defer></script>
 <script src="./bus-lab.js" defer></script>
 <script src="./waterways.js" defer></script>
+<script src="./pmtiles-layer.js" type="module"></script>
 </body></html>
