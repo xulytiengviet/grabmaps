@@ -45,7 +45,18 @@ ctx.globalAlpha=1;
 function newLayer(deps){
 return L.GridLayer.extend({createTile(coords,done){
 const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
-archive.getZxy(coords.z,coords.x,coords.y).then(res=>{if(res?.data)paint(new Uint8Array(res.data),canvas,deps);done(null,canvas)}).catch(e=>{console.warn('PMTile fetch',e);done(e,canvas)});
+archive.getZxy(coords.z,coords.x,coords.y).then(async res=>{
+if(res?.data){
+let raw=new Uint8Array(res.data);
+if(raw.length>2&&raw[0]===0x1f&&raw[1]===0x8b){
+if(!('DecompressionStream' in window))throw Error('Trình duyệt không hỗ trợ giải nén GZIP cho MVT');
+const stream=new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'));
+raw=new Uint8Array(await new Response(stream).arrayBuffer());
+}
+paint(raw,canvas,deps);
+}
+done(null,canvas);
+}).catch(e=>{console.warn('PMTiles tile decode:',e);done(e,canvas)});
 return canvas}})}
 async function load(){
 $('pm-reload').disabled=true;show('Đang kiểm tra PMTiles và hỗ trợ HTTP Range…');
@@ -53,7 +64,7 @@ try{
 const url=configuredUrl();if(!url)throw Error('URL cấu hình không hợp lệ');
 const deps=await dependencies();archive=new deps.PMTiles(url);
 const h=await archive.getHeader();
-if(h.tileType!==1)throw Error('Tệp không phải MVT/PBF; hãy dùng tippecanoe tạo PMTiles vector');
+if(h.tileType!==1)throw Error('Tệp không phải MVT/PBF (tileType='+h.tileType+')');
 if(tileLayer)map.removeLayer(tileLayer);
 const Layer=newLayer(deps);tileLayer=new Layer({tileSize:256,opacity:1,maxNativeZoom:h.maxZoom,maxZoom:21,minZoom:h.minZoom}).addTo(map);configUrl=url;
 show('Đã kết nối PMTiles · zoom '+h.minZoom+'–'+h.maxZoom+'. Hiển thị bus_stops / service_zones hoặc các lớp giao thông tương thích.');
