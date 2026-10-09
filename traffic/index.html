@@ -37,7 +37,7 @@ button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
 <div class="stat"><div><b id="countRoad">0</b>Đường</div><div><b id="countPoi">0</b>Đối tượng</div><div><b id="countNode">0</b>Nút giao*</div></div>
 <p class="hint">*Nút giao được ước lượng từ các nút đường OSM dùng chung, không phải đồ thị điều hướng đã chuẩn hóa.</p>
 <button id="settingsBtn" class="secondary" style="width:100%">⚙ Cài đặt kết nối dịch vụ</button><h2>Lớp dữ liệu giao thông</h2><div id="toggles"></div>
-<h2>Dữ liệu giao thông thực tế</h2><label class="option"><span>Tự tải khi di chuyển bản đồ</span><input type="checkbox" id="autoLoad" checked></label><p class="hint" id="dataInfo">Chưa tải lớp dữ liệu. Nền Vietflex là ảnh bản đồ, không tự cung cấp GeoJSON giao thông.</p><h2>Thu thập dữ liệu trong khung nhìn</h2>
+<section id="bus500-panel"></section><h2>Dữ liệu giao thông thực tế</h2><label class="option"><span>Tự tải khi di chuyển bản đồ</span><input type="checkbox" id="autoLoad" checked></label><p class="hint" id="dataInfo">Chưa tải lớp dữ liệu. Nền Vietflex là ảnh bản đồ, không tự cung cấp GeoJSON giao thông.</p><h2>Thu thập dữ liệu trong khung nhìn</h2>
 <div class="buttons"><button id="load">Tải dữ liệu OSM</button><button class="secondary" id="export">Xuất GeoJSON</button></div>
 <p>Tự tải một vùng quanh trung tâm khi mở hoặc di chuyển bản đồ. Nhấn Tải dữ liệu OSM để thử lại. Các lớp chỉ hiển thị nơi OpenStreetMap đã có dữ liệu.</p>
 <h2>Tìm đường (tham khảo)</h2>
@@ -123,6 +123,7 @@ try {
   }).addTo(map);
 }
 
+window.trafficMap=map;
 const groups={},records=[], roadIds=new Set(),nodeRefs=new Map();let loadSerial=0,autoTimer=null;let start=null,end=null,mode=null,routeLine=null,markers=[];
 const featureCounts={};
 const defs=[
@@ -196,4 +197,6 @@ const r=await fetch(url);if(!r.ok)throw Error('HTTP '+r.status);const j=await r.
 if(routeLine)map.removeLayer(routeLine);const rr=j.routes[0];routeLine=L.geoJSON(rr.geometry,{style:{color:'#e11d48',weight:6,opacity:.8}}).addTo(map);map.fitBounds(routeLine.getBounds(),{padding:[35,35]});
 status('Tuyến tham khảo: '+(rr.distance/1000).toFixed(2)+' km · '+Math.round(rr.duration/60)+' phút (ước lượng OSRM, không dùng giao thông trực tiếp).');
 }catch(e){status('Lỗi định tuyến: '+e.message)}};
-</script></body></html>
+</script>
+<script src="./bus500.js" defer></script>
+</body></html>
