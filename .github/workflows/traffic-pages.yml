@@ -25,7 +25,7 @@ jobs:
       - name: Prepare static website
         run: |
           mkdir -p _site/traffic
-          cp traffic/index.html _site/traffic/index.html
+          cp -a traffic/. _site/traffic/
           printf '<meta http-equiv="refresh" content="0;url=./traffic/">\n' > _site/index.html
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
