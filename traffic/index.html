@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TP.HCM Traffic GIS | GrabMaps</title>
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<style>
+:root{font-family:Inter,system-ui,Arial,sans-serif;color:#12253a}*{box-sizing:border-box}body{margin:0;background:#f7fafc}
+header{height:62px;background:white;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #dae3ed}
+header b{font-size:19px}header small{color:#64748b}main{display:flex;height:calc(100dvh - 62px)}
+aside{width:340px;background:white;overflow:auto;padding:17px;border-right:1px solid #dce4ec;flex-shrink:0}
+#map{flex:1;min-width:0}.tag{font-size:11px;color:#235ea5;background:#eaf2ff;padding:5px 9px;border-radius:999px}
+h2{font-size:15px;margin:18px 0 9px}p,.muted{font-size:12px;line-height:1.55;color:#65748b}
+.option{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eff3f7;font-size:13px}
+.option input{accent-color:#1664bf}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{background:#1766bc;border:0;color:white;padding:10px 11px;border-radius:9px;cursor:pointer;font-weight:600;font-size:12px}
+button.secondary{background:#eaf2fb;color:#145294}button:disabled{opacity:.5}
+.field{width:100%;padding:10px 12px;border:1px solid #d6dfe9;border-radius:9px;margin:4px 0}
+#status{font-size:12px;padding:10px;background:#f0f6fd;border-radius:8px;margin:12px 0;line-height:1.5}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.stat div{background:#f4f7fb;border-radius:8px;text-align:center;padding:9px 3px;font-size:11px}
+.stat b{display:block;font-size:18px;margin-bottom:3px}.hint{font-size:11px;color:#69788b}
+.legend{background:#fff;padding:8px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 9px #0002}
+@media(max-width:700px){header{height:55px;padding:0 12px}header b{font-size:16px}main{flex-direction:column-reverse;height:calc(100dvh - 55px)}aside{width:100%;height:42%;border-right:0;border-top:1px solid #ddd;padding:12px}#map{height:58%}}
+</style></head><body><header><div><b>TP.HCM · Traffic GIS</b> <span class="tag">GrabMaps Lab</span></div><small>OSM · GeoJSON · Routing</small></header>
+<main><aside>
+<div class="stat"><div><b id="countRoad">0</b>Đường</div><div><b id="countPoi">0</b>Đối tượng</div><div><b id="countNode">0</b>Nút giao*</div></div>
+<p class="hint">*Nút giao được ước lượng từ các nút đường OSM dùng chung, không phải đồ thị điều hướng đã chuẩn hóa.</p>
+<h2>Lớp dữ liệu giao thông</h2><div id="toggles"></div>
+<h2>Thu thập dữ liệu trong khung nhìn</h2>
+<div class="buttons"><button id="load">Tải dữ liệu OSM</button><button class="secondary" id="export">Xuất GeoJSON</button></div>
+<p>Phóng to tới quận/khu vực cần xem rồi nhấn tải. Giới hạn diện tích để bảo vệ dịch vụ Overpass cộng đồng.</p>
+<h2>Tìm đường (tham khảo)</h2>
+<p>Nhấn “Chọn điểm đầu”, nhấp bản đồ; tiếp tục chọn điểm cuối. Tuyến xe ô tô tham khảo từ OSRM, không thay thế hướng dẫn giao thông thực tế.</p>
+<div class="buttons"><button id="start">Chọn điểm đầu</button><button id="end">Chọn điểm cuối</button><button class="secondary" id="route">Tính tuyến</button><button class="secondary" id="clear">Xóa tuyến</button></div>
+<h2>Thông tin và kiểm chứng</h2>
+<div id="status">Sẵn sàng. Chọn một lớp và tải dữ liệu OSM theo khung nhìn.</div>
+<p><b>Nguồn:</b> © OpenStreetMap contributors (ODbL). Tuyến OSRM demo công cộng có thể bị giới hạn. Không có dữ liệu ùn tắc trực tiếp hoặc camera phạt nguội thời gian thực.</p>
+<p><b>Lưu ý:</b> Tải trọng, chiều cao tĩnh không, tốc độ và làn xe chỉ hiển thị khi OSM có thuộc tính tương ứng; không suy đoán các giá trị thiếu. GrabMaps/AWS chưa được kết nối.</p>
+</aside><div id="map"></div></main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map',{preferCanvas:true}).setView([10.7769,106.7009],12);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+const groups={},records=[], roadIds=new Set(),nodeRefs=new Map();let start=null,end=null,mode=null,routeLine=null,markers=[];
+const defs=[
+['roads','Đường và đường hẻm','#2563eb'],['intersections','Nút giao thông','#7c3aed'],
+['signs','Biển báo / đèn tín hiệu','#eab308'],['bridges','Cầu và hầm','#0f766e'],
+['stops','Bến xe / dừng đỗ','#9333ea'],['parking','Bãi đỗ xe','#475569'],
+['fuel','Cây xăng / trạm sạc','#0891b2'],['public','Trường học / bệnh viện / công cộng','#16a34a'],
+['alerts','Cảnh báo có thẻ OSM','#dc2626'],['zones','Vùng phân tích (lưới)','#d97706']
+];
+defs.forEach(([k,label,color])=>{groups[k]=L.layerGroup().addTo(map);const div=document.createElement('label');div.className='option';div.innerHTML='<span><span style="color:'+color+'">●</span> '+label+'</span><input type="checkbox" checked>';div.querySelector('input').onchange=e=>e.target.checked?groups[k].addTo(map):map.removeLayer(groups[k]);document.getElementById('toggles').append(div)});
+const status=t=>document.getElementById('status').textContent=t;
+const esc=s=>String(s??'Không có dữ liệu').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const name=tags=>tags.name||tags['name:vi']||tags.ref||'Chưa có tên';
+function desc(tags){const keys=['name','highway','maxspeed','lanes','oneway','maxweight','maxheight','bridge','tunnel','surface','access','amenity','shop','barrier','traffic_sign','flood_prone','construction','operator'];
+return '<div style="min-width:200px"><b>'+esc(name(tags))+'</b><table>'+keys.filter(k=>tags[k]!=null).map(k=>'<tr><td style="padding:3px;color:#666">'+esc(k)+'</td><td style="padding:3px">'+esc(tags[k])+'</td></tr>').join('')+'</table><small>OSM · giá trị thiếu chưa kiểm chứng</small></div>'}
+function collect(k,geo,tags,id){records.push({type:'Feature',properties:{...tags,_layer:k,_osm_id:id},geometry:geo})}
+function point(k,lat,lon,tags,id){L.circleMarker([lat,lon],{radius:k==='intersections'?3:5,color:defs.find(x=>x[0]===k)[2],weight:1,fillOpacity:.85}).bindPopup(desc(tags)).addTo(groups[k]);collect(k,{type:'Point',coordinates:[lon,lat]},tags,id)}
+function line(k,coords,tags,id){L.polyline(coords,{color:defs.find(x=>x[0]===k)[2],weight:k==='roads'?3:5,opacity:.8}).bindPopup(desc(tags)).addTo(groups[k]);collect(k,{type:'LineString',coordinates:coords.map(c=>[c[1],c[0]])},tags,id)}
+function classify(t){if(t.highway==='traffic_signals'||t.traffic_sign||t.highway==='stop'||t.highway==='give_way')return 'signs';
+if(t.amenity==='parking'||t.amenity==='motorcycle_parking')return 'parking';
+if(['fuel','charging_station'].includes(t.amenity))return 'fuel';
+if(['bus_station','ferry_terminal'].includes(t.amenity)||t.highway==='bus_stop'||t.public_transport)return 'stops';
+if(['school','university','hospital','clinic','townhall','police','fire_station'].includes(t.amenity)||t.shop==='mall')return 'public';
+if(t.hazard||t.flood_prone==='yes'||t.highway==='construction'||t.construction||t.traffic_calming||t.barrier)return 'alerts';return null}
+function grid(){const b=map.getBounds();const dx=(b.getEast()-b.getWest())/4,dy=(b.getNorth()-b.getSouth())/4;
+for(let x=0;x<4;x++)for(let y=0;y<4;y++){const a=b.getWest()+x*dx,c=b.getSouth()+y*dy;
+const corners=[[c,a],[c+dy,a],[c+dy,a+dx],[c,a+dx]];
+L.polygon(corners,{color:'#d97706',fillOpacity:.025,weight:1,dashArray:'4,5'}).bindTooltip('Ô phân tích '+(x+1)+'-'+(y+1)+' · chưa có dữ liệu lưu lượng').addTo(groups.zones)}}
+async function load(){const b=map.getBounds(),south=b.getSouth(),west=b.getWest(),north=b.getNorth(),east=b.getEast();
+if((north-south)*(east-west)>0.025){status('Khung nhìn quá rộng. Hãy zoom thêm (khoảng cấp 13–15) rồi tải.');return}
+document.getElementById('load').disabled=true;status('Đang tải dữ liệu OpenStreetMap / Overpass…');
+const bb=[south,west,north,east].map(v=>v.toFixed(6)).join(',');
+const q='[out:json][timeout:35];(way["highway"]('+bb+');way["bridge"]('+bb+');way["tunnel"]('+bb+');node["highway"~"traffic_signals|stop|give_way|bus_stop"]('+bb+');node["traffic_sign"]('+bb+');node["amenity"~"parking|motorcycle_parking|fuel|charging_station|bus_station|school|university|hospital|clinic|townhall|police|fire_station"]('+bb+');node["shop"="mall"]('+bb+');node["public_transport"]('+bb+');node["hazard"]('+bb+');node["flood_prone"="yes"]('+bb+');node["barrier"]('+bb+'););out body;>;out skel qt;';
+try{const endpoint='https://overpass.kumi.systems/api/interpreter';const r=await fetch(endpoint,{method:'POST',body:new URLSearchParams({data:q})});if(!r.ok)throw Error('HTTP '+r.status);
+const json=await r.json(),nodes=new Map();json.elements.filter(e=>e.type==='node').forEach(n=>nodes.set(n.id,n));
+defs.forEach(([k])=>groups[k].clearLayers());records.length=0;roadIds.clear();nodeRefs.clear();
+let road=0,pois=0;for(const e of json.elements){const t=e.tags||{};
+if(e.type==='way'&&Array.isArray(e.nodes)){const coords=e.nodes.map(id=>nodes.get(id)).filter(Boolean).map(n=>[n.lat,n.lon]);if(coords.length<2)continue;
+if(t.highway){line('roads',coords,t,'way/'+e.id);road++;roadIds.add(e.id);e.nodes.forEach(n=>nodeRefs.set(n,(nodeRefs.get(n)||0)+1))}
+if(t.bridge==='yes'||(t.bridge&&t.bridge!=='no')||t.tunnel==='yes'||(t.tunnel&&t.tunnel!=='no'))line('bridges',coords,t,'way/'+e.id);
+if(classify(t)==='alerts')line('alerts',coords,t,'way/'+e.id)
+}else if(e.type==='node'&&t&&Object.keys(t).length){const k=classify(t);if(k){point(k,e.lat,e.lon,t,'node/'+e.id);pois++}}}
+for(const [id,n] of nodeRefs){if(n>1){const p=nodes.get(id);if(p)point('intersections',p.lat,p.lon,{name:'Nút đường chung',osm_node:id,ways:n},'node/'+id)}}
+grid();document.getElementById('countRoad').textContent=road;document.getElementById('countPoi').textContent=pois;document.getElementById('countNode').textContent=[...nodeRefs.values()].filter(n=>n>1).length;
+status('Đã tải '+road+' đoạn đường, '+pois+' điểm có thẻ, '+[...nodeRefs.values()].filter(n=>n>1).length+' nút chung. Dữ liệu OSM không đầy đủ và không phải giao thông thời gian thực.');
+}catch(err){status('Không tải được Overpass: '+err.message+'. Thử zoom gần hơn hoặc tải lại sau.')}finally{document.getElementById('load').disabled=false}}
+document.getElementById('load').onclick=load;
+document.getElementById('export').onclick=()=>{if(!records.length){status('Chưa có dữ liệu để xuất.');return}const blob=new Blob([JSON.stringify({type:'FeatureCollection',features:records})],{type:'application/geo+json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='hcm-traffic-osm.geojson';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+document.getElementById('start').onclick=()=>{mode='start';status('Nhấp trên bản đồ để chọn điểm xuất phát.')};
+document.getElementById('end').onclick=()=>{mode='end';status('Nhấp trên bản đồ để chọn điểm đến.')};
+map.on('click',e=>{if(!mode)return;const k=mode;if(k==='start')start=e.latlng;else end=e.latlng;const m=L.marker(e.latlng).addTo(map).bindPopup(k==='start'?'Điểm đầu':'Điểm cuối');markers.push(m);mode=null;status('Đã chọn '+(k==='start'?'điểm đầu':'điểm cuối')+'. Nhấn Tính tuyến khi đủ hai điểm.')});
+document.getElementById('clear').onclick=()=>{start=end=mode=null;if(routeLine)map.removeLayer(routeLine);markers.forEach(m=>map.removeLayer(m));markers=[];routeLine=null;status('Đã xóa tuyến.')};
+document.getElementById('route').onclick=async()=>{if(!start||!end){status('Cần chọn cả điểm đầu và điểm cuối.');return}
+status('Đang tìm tuyến tham khảo OSRM…');try{const url='https://router.project-osrm.org/route/v1/driving/'+start.lng+','+start.lat+';'+end.lng+','+end.lat+'?overview=full&geometries=geojson';
+const r=await fetch(url);if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(j.code!=='Ok'||!j.routes?.length)throw Error('Không tìm được tuyến');
+if(routeLine)map.removeLayer(routeLine);const rr=j.routes[0];routeLine=L.geoJSON(rr.geometry,{style:{color:'#e11d48',weight:6,opacity:.8}}).addTo(map);map.fitBounds(routeLine.getBounds(),{padding:[35,35]});
+status('Tuyến tham khảo: '+(rr.distance/1000).toFixed(2)+' km · '+Math.round(rr.duration/60)+' phút (ước lượng OSRM, không dùng giao thông trực tiếp).');
+}catch(e){status('Lỗi định tuyến: '+e.message)}};
+</script></body></html>
