@@ -56,3 +56,11 @@ Sample CORS:
 
 Do not run the independent *Build HCMC Traffic PMTiles* workflow and assume it produces the same data: that workflow builds a different OSM transport dataset and currently uses a different classification schema.
 
+
+## Default Cloudflare R2 URL (2026-10-09)
+
+The Traffic GIS PMTiles client now loads the following public URL by default when a user has not explicitly saved another PMTiles URL in Settings:
+
+`https://pub-2aa79804a6c64275af743f277eeca6f2.r2.dev/hcm-traffic.pmtiles`
+
+File: `traffic/pmtiles-layer.js`. Cloudflare R2 ownership, public-access configuration, object existence and production CORS/Range behavior must be verified against the deployed endpoint. A pre-existing localStorage PMTiles URL takes precedence; Settings → Restore defaults removes this override.
